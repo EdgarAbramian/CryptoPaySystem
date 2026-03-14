@@ -1,0 +1,87 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: crypto_payments
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  api:
+    build: .
+    command: uvicorn services.api.app:app --host 0.0.0.0 --port 8000 --reload
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/crypto_payments
+      REDIS_URL: redis://redis:6379/0
+      BITCOIN_RPC_URL: http://80.89.238.37:18332
+      BITCOIN_ZMQ_RAW_TX: tcp://80.89.238.37:28333
+      BITCOIN_ZMQ_RAW_BLOCK: tcp://80.89.238.37:28332
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - .:/app
+
+  watcher:
+    build: .
+    command: python -m services.watcher.zmq_watcher
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/crypto_payments
+      REDIS_URL: redis://redis:6379/0
+      BITCOIN_RPC_URL: http://80.89.238.37:18332
+      BITCOIN_ZMQ_RAW_TX: tcp://80.89.238.37:28333
+      BITCOIN_ZMQ_RAW_BLOCK: tcp://80.89.238.37:28332
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - .:/app
+    restart: unless-stopped
+
+  ledger:
+    build: .
+    command: python -m services.ledger
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/crypto_payments
+      REDIS_URL: redis://redis:6379/0
+      BITCOIN_RPC_URL: http://80.89.238.37:18332
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - .:/app
+    restart: unless-stopped
+
+volumes:
+  pgdata:
