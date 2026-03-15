@@ -82,6 +82,17 @@ X-Admin-Secret: <admin_secret>
     app.include_router(merchant_router,  prefix="/api/v1")
     app.include_router(admin_router,     prefix="/api/v1")
 
+    # ── Dev / Testnet helpers (DEBUG only) ───────────────────────────────────
+    # Safe to delete dev.py in production — this block is never executed when
+    # DEBUG=false, so there will be no ImportError even if the file is absent.
+    if settings.debug:
+        from services.api.routers.dev import router as dev_router  # noqa: PLC0415
+        app.include_router(dev_router, prefix="/api/v1")
+        logger.warning(
+            "⚠️  DEV MODE ENABLED — /api/v1/dev/* endpoints are active. "
+            "Set DEBUG=false before deploying to production."
+        )
+
     # ── Health ───────────────────────────────────────────────────────────────
     @app.get("/health", tags=["system"], summary="Health check")
     async def health() -> dict:
