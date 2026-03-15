@@ -1,3 +1,6 @@
+"""
+SQLAlchemy 2.0 async ORM models for the custodial payment system.
+"""
 from __future__ import annotations
 
 import enum
@@ -27,12 +30,16 @@ class Base(DeclarativeBase):
 
 
 class InvoiceStatus(str, enum.Enum):
-    NEW = "NEW"
-    PENDING = "PENDING"  # tx seen on-chain, waiting for confirmations
-    PARTIAL = "PARTIAL"  # partially paid
-    PAID = "PAID"  # fully confirmed
+    NEW     = "NEW"
+    PENDING = "PENDING"   # tx seen on-chain, waiting for confirmations
+    PARTIAL = "PARTIAL"   # partially paid
+    PAID    = "PAID"      # fully confirmed
     EXPIRED = "EXPIRED"
 
+
+# ---------------------------------------------------------------------------
+# Coin
+# ---------------------------------------------------------------------------
 
 class Coin(Base):
     __tablename__ = "coins"
@@ -49,6 +56,10 @@ class Coin(Base):
         return f"<Coin {self.symbol}>"
 
 
+# ---------------------------------------------------------------------------
+# Merchant
+# ---------------------------------------------------------------------------
+
 class Merchant(Base):
     __tablename__ = "merchants"
 
@@ -60,6 +71,7 @@ class Merchant(Base):
         Numeric(5, 2), default=Decimal("1.00"), nullable=False
     )
     webhook_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -70,6 +82,10 @@ class Merchant(Base):
     def __repr__(self) -> str:
         return f"<Merchant {self.id}>"
 
+
+# ---------------------------------------------------------------------------
+# Invoice
+# ---------------------------------------------------------------------------
 
 class Invoice(Base):
     __tablename__ = "invoices"
@@ -111,6 +127,10 @@ class Invoice(Base):
         return f"<Invoice {self.id} status={self.status}>"
 
 
+# ---------------------------------------------------------------------------
+# Balance
+# ---------------------------------------------------------------------------
+
 class Balance(Base):
     __tablename__ = "balances"
     __table_args__ = (
@@ -141,6 +161,10 @@ class Balance(Base):
         return f"<Balance merchant={self.merchant_id} coin={self.coin_id}>"
 
 
+# ---------------------------------------------------------------------------
+# Transaction
+# ---------------------------------------------------------------------------
+
 class Transaction(Base):
     __tablename__ = "transactions"
 
@@ -168,6 +192,10 @@ class Transaction(Base):
     def __repr__(self) -> str:
         return f"<Transaction {self.txid[:16]}… conf={self.confirmations} credited={self.credited}>"
 
+
+# ---------------------------------------------------------------------------
+# SystemFeeLog  — immutable append-only audit trail for collected fees
+# ---------------------------------------------------------------------------
 
 class SystemFeeLog(Base):
     __tablename__ = "system_fee_log"
@@ -201,6 +229,10 @@ class SystemFeeLog(Base):
     def __repr__(self) -> str:
         return f"<SystemFeeLog fee={self.fee_amount} net={self.net_amount}>"
 
+
+# ---------------------------------------------------------------------------
+# UTXO  — tracks spendable outputs received on invoice addresses
+# ---------------------------------------------------------------------------
 
 class UTXO(Base):
     __tablename__ = "utxos"
@@ -236,12 +268,16 @@ class UTXO(Base):
         return f"<UTXO {self.txid[:16]}…:{self.vout} amount={self.amount} spent={self.is_spent}>"
 
 
+# ---------------------------------------------------------------------------
+# Payout
+# ---------------------------------------------------------------------------
+
 class PayoutStatus(str, enum.Enum):
-    PENDING = "PENDING"  # created, balance locked
+    PENDING    = "PENDING"     # created, balance locked
     PROCESSING = "PROCESSING"  # UTXOs selected, tx being built
-    SENT = "SENT"  # broadcast to network
-    CONFIRMED = "CONFIRMED"  # enough on-chain confirmations
-    FAILED = "FAILED"  # broadcast failed or timed out
+    SENT       = "SENT"        # broadcast to network
+    CONFIRMED  = "CONFIRMED"   # enough on-chain confirmations
+    FAILED     = "FAILED"      # broadcast failed or timed out
 
 
 class Payout(Base):

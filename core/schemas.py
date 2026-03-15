@@ -1,3 +1,8 @@
+"""
+Pydantic v2 schemas for request/response validation.
+"""
+from __future__ import annotations
+
 import uuid
 from decimal import Decimal
 from typing import Annotated
@@ -7,9 +12,17 @@ from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator
 from core.models import InvoiceStatus
 
 
+# ---------------------------------------------------------------------------
+# Shared config
+# ---------------------------------------------------------------------------
+
 class _BaseSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
+
+# ---------------------------------------------------------------------------
+# Coin
+# ---------------------------------------------------------------------------
 
 class CoinOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -19,6 +32,10 @@ class CoinOut(BaseModel):
     name: str
     is_active: bool
 
+
+# ---------------------------------------------------------------------------
+# Merchant
+# ---------------------------------------------------------------------------
 
 class MerchantCreate(BaseModel):
     commission_pcent: Annotated[Decimal, Field(ge=Decimal("0"), le=Decimal("100"))] = Decimal(
@@ -33,10 +50,16 @@ class MerchantOut(_BaseSchema):
     webhook_url: str | None
 
 
-class InvoiceCreateRequest(BaseModel):
-    """Payload for POST /api/v1/invoices/create"""
+# ---------------------------------------------------------------------------
+# Invoice
+# ---------------------------------------------------------------------------
 
-    merchant_id: uuid.UUID
+class InvoiceCreateRequest(BaseModel):
+    """Payload for POST /api/v1/invoices/create.
+
+    merchant_id не нужен — берётся из X-API-Key аутентификации.
+    """
+
     coin_symbol: Annotated[str, Field(min_length=1, max_length=16)]
     amount: Annotated[Decimal, Field(gt=Decimal("0"))]
 
@@ -56,6 +79,10 @@ class InvoiceOut(_BaseSchema):
     derivation_index: int
 
 
+# ---------------------------------------------------------------------------
+# Transaction
+# ---------------------------------------------------------------------------
+
 class TransactionOut(_BaseSchema):
     id: uuid.UUID
     invoice_id: uuid.UUID
@@ -63,6 +90,10 @@ class TransactionOut(_BaseSchema):
     amount_received: Decimal
     confirmations: int
 
+
+# ---------------------------------------------------------------------------
+# Generic API responses
+# ---------------------------------------------------------------------------
 
 class ErrorResponse(BaseModel):
     detail: str
