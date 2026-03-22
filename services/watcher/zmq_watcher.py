@@ -109,6 +109,7 @@ class ZmqWatcher:
         await self._import_existing_addresses()
 
         self._running = True
+        try:
             async with asyncio.TaskGroup() as tg:
                 tg.create_task(self._listen_tx(), name="zmq-rawtx")
                 tg.create_task(self._listen_block(), name="zmq-rawblock")
@@ -297,10 +298,9 @@ class ZmqWatcher:
         logger.info("importaddress bootstrap complete")
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Entry-point
-# ─────────────────────────────────────────────────────────────────────────────
-
+    # ─────────────────────────────────────────────────────────────────────────────
+    # Redis Events
+    # ─────────────────────────────────────────────────────────────────────────────
 
     async def _listen_invoice_events(self) -> None:
         """Subscribes to Redis for new invoices and updates the local cache immediately."""
