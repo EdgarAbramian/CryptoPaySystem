@@ -96,8 +96,20 @@ class BitcoinRPCClient:
     async def get_block_count(self) -> int:
         return await self._call("getblockcount")
 
+    async def get_connection_count(self) -> int:
+        return await self._call("getconnectioncount")
+
     async def get_block_hash(self, height: int) -> str:
         return await self._call("getblockhash", height)
+
+    async def get_blockchain_info(self) -> dict:
+        return await self._call("getblockchaininfo")
+
+    async def get_network_info(self) -> dict:
+        return await self._call("getnetworkinfo")
+
+    async def get_uptime(self) -> int:
+        return await self._call("uptime")
 
     async def get_transaction(self, txid: str) -> dict:
         """

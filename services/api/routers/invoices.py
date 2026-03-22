@@ -52,6 +52,10 @@ async def create_invoice(
             merchant_id=merchant.id,
             coin_symbol=payload.coin_symbol,
             amount=payload.amount,
+            amount_usd=payload.amount_usd,
+            customer_email=payload.customer_email,
+            description=payload.description,
+            country_code=payload.country_code,
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))

@@ -33,10 +33,11 @@ X-API-Key: <your_api_key>
 ```
 
 ### Admin эндпоинты
-Требуют заголовок:
+Требуют JWT токен в заголовке:
 ```
-X-Admin-Secret: <admin_secret>
+Authorization: Bearer <token>
 ```
+Токен можно получить через `POST /api/admin/auth/login`.
 
 ### Порядок работы
 1. Админ регистрирует мерчанта → получает `api_key`
@@ -72,15 +73,23 @@ X-Admin-Secret: <admin_secret>
         logger.info("Shutting down %s …", settings.app_name)
 
     # ── Routers ──────────────────────────────────────────────────────────────
-    from services.api.routers.invoices import router as invoices_router
-    from services.api.routers.merchant import router as merchant_router
-    from services.api.routers.admin_merchants import router as admin_router
-    from services.payout.router import router as payouts_router
+    from services.api.routers import admin_routes, invoices, merchant, auth
+    from services.payout.router import router as payout_router
 
-    app.include_router(invoices_router,  prefix="/api/v1")
-    app.include_router(payouts_router,   prefix="/api/v1")
-    app.include_router(merchant_router,  prefix="/api/v1")
-    app.include_router(admin_router,     prefix="/api/v1")
+    app.include_router(invoices.router,         prefix="/api/v1")
+    app.include_router(auth.router,             prefix="/api/v1")
+    app.include_router(payout_router,           prefix="/api/v1")
+    app.include_router(merchant.router,         prefix="/api/v1")
+    # Admin Routes
+    app.include_router(admin_routes.auth_router,       prefix="/api/admin")
+    app.include_router(admin_routes.merchants_router,  prefix="/api/admin")
+    app.include_router(admin_routes.dashboard_router,  prefix="/api/admin")
+    app.include_router(admin_routes.transactions_router, prefix="/api/admin")
+    app.include_router(admin_routes.nodes_router,      prefix="/api/admin")
+    app.include_router(admin_routes.system_router,     prefix="/api/admin")
+    app.include_router(admin_routes.search_router,     prefix="/api/admin")
+    app.include_router(admin_routes.notifications_router, prefix="/api/admin")
+    app.include_router(admin_routes.analytics_router,    prefix="/api/admin")
 
     # ── Dev / Testnet helpers (DEBUG only) ───────────────────────────────────
     # Safe to delete dev.py in production — this block is never executed when

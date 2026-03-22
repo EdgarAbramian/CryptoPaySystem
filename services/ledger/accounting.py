@@ -17,6 +17,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.models import Balance, Coin, Invoice, InvoiceStatus, Merchant, SystemFeeLog, Transaction, UTXO
+from services.price.service import PriceService
 
 logger = logging.getLogger(__name__)
 
@@ -103,14 +104,19 @@ class AccountingEngine:
         balance.amount_available += result.net
 
         # ── Audit log ───────────────────────────────────────────────────
+        usd_rate = PriceService.get_rate(coin.symbol)
         fee_log = SystemFeeLog(
             transaction_id=transaction.id,
             merchant_id=merchant.id,
             coin_id=coin.id,
             gross_amount=result.gross,
+            gross_amount_usd=PriceService.to_usd(result.gross, coin.symbol),
             commission_pcent=result.commission_pcent,
             fee_amount=result.fee,
+            fee_amount_usd=PriceService.to_usd(result.fee, coin.symbol),
             net_amount=result.net,
+            net_amount_usd=PriceService.to_usd(result.net, coin.symbol),
+            usd_rate=usd_rate,
         )
         self._s.add(fee_log)
 

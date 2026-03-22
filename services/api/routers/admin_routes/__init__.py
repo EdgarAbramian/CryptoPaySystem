@@ -1,0 +1,9 @@
+from .auth import router as auth_router
+from .admin_dashboard import router as dashboard_router
+from .admin_merchants import router as merchants_router
+from .admin_transactions import router as transactions_router
+from .admin_nodes import router as nodes_router
+from .admin_system import router as system_router
+from .admin_search import router as search_router
+from .admin_notifications import router as notifications_router
+from .admin_analytics import router as analytics_router

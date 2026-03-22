@@ -1,6 +1,20 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from datetime import datetime
 from decimal import Decimal
+
+
+@dataclass
+class NodeStatus:
+    """Technical metrics for a blockchain node."""
+    id: str
+    coin: str
+    status: str           # synced, syncing, error, offline
+    block_height: int
+    peers: int
+    uptime: str
+    version: str
+    last_sync: datetime
 
 
 @dataclass
@@ -68,6 +82,14 @@ class BaseProvider(ABC):
         Raises ProviderError on network failure.
         """
         raise NotImplementedError
+
+    async def ping(self) -> bool:
+        """Return True if the node/provider is reachable and healthy."""
+        return True
+
+    @abstractmethod
+    async def get_node_status(self) -> NodeStatus:
+        """Fetch real-time technical metrics from the node."""
 
 
 class ProviderError(Exception):

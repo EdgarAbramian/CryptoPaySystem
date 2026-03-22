@@ -31,6 +31,10 @@ class InvoiceService:
         merchant_id: uuid.UUID,
         coin_symbol: str,
         amount: Decimal,
+        amount_usd: Decimal | None = None,
+        customer_email: str | None = None,
+        description: str | None = None,
+        country_code: str | None = None,
     ) -> Invoice:
         """
         Create a new invoice:
@@ -56,8 +60,12 @@ class InvoiceService:
             merchant_id=merchant.id,
             address=address,
             amount_expected=amount,
+            amount_usd=amount_usd,
             status=InvoiceStatus.NEW,
+            customer_email=customer_email,
+            description=description,
             derivation_index=index,
+            country_code=country_code,
         )
         self._session.add(invoice)
         await self._session.flush()  # populate invoice.id before commit
@@ -93,9 +101,17 @@ class InvoiceService:
                     rescan=False,
                 )
         except Exception as exc:
-            logger.warning(
-                "Could not import address %s into node: %s", address, exc
-            )
+            msg = str(exc)
+            if "Only legacy wallets are supported" in msg:
+                logger.warning(
+                    "Node is using a descriptor wallet. importaddress skipped for %s. "
+                    "Incoming payments will still be detected by the Watcher if it uses raw-tx polling.",
+                    address
+                )
+            else:
+                logger.warning(
+                    "Could not import address %s into node: %s", address, exc
+                )
 
     # -----------------------------------------------------------------------
     # Private helpers

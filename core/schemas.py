@@ -62,6 +62,10 @@ class InvoiceCreateRequest(BaseModel):
 
     coin_symbol: Annotated[str, Field(min_length=1, max_length=16)]
     amount: Annotated[Decimal, Field(gt=Decimal("0"))]
+    amount_usd: Decimal | None = None
+    customer_email: str | None = None
+    description: str | None = None
+    country_code: Annotated[str | None, Field(min_length=2, max_length=2)] = None
 
     @field_validator("coin_symbol")
     @classmethod
@@ -76,6 +80,8 @@ class InvoiceOut(_BaseSchema):
     address: str
     amount_expected: Decimal
     status: InvoiceStatus
+    customer_email: str | None = None
+    description: str | None = None
     derivation_index: int
 
 

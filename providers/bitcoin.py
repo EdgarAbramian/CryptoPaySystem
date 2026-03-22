@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from datetime import datetime
 from decimal import Decimal
 from functools import lru_cache
 
@@ -10,6 +11,7 @@ from core.config import settings
 from providers.base import (
     AddressGenerationError,
     BaseProvider,
+    NodeStatus,
     ProviderError,
     TxInfo,
     TxNotFoundError,
@@ -231,7 +233,7 @@ class BitcoinProvider(BaseProvider):
         """Decode a raw hex-encoded transaction via RPC."""
         return await self._rpc.decode_raw_transaction(raw_hex)
 
-    async def node_reachable(self) -> bool:
+    async def ping(self) -> bool:
         """Return True if the Bitcoin Core node responds to ping."""
         return await self._rpc.ping()
 
@@ -504,6 +506,50 @@ class BitcoinProvider(BaseProvider):
     async def get_fee_rate(self) -> int:
         """Return current sat/vByte fee rate from node estimatesmartfee."""
         return await self._rpc.estimate_smart_fee()
+
+    async def get_node_status(self) -> NodeStatus:
+        """Fetch real-time technical metrics from the Bitcoin Core node."""
+        try:
+            blockchain = await self._rpc.get_blockchain_info()
+            network = await self._rpc.get_network_info()
+            try:
+                seconds = await self._rpc.get_uptime()
+            except Exception:
+                seconds = 0
+
+            # Format uptime: days, hours, minutes
+            days, rem = divmod(seconds, 86400)
+            hours, rem = divmod(rem, 3600)
+            minutes, _ = divmod(rem, 60)
+            uptime_str = f"{days}d {hours}h {minutes}m"
+
+            status = "synced"
+            if blockchain.get("initialblockdownload"):
+                status = "syncing"
+
+            env_name = "testnet" if settings.btc_testnet else "mainnet"
+            return NodeStatus(
+                id=f"btc-{env_name}-01",
+                coin="BTC",
+                status=status,
+                block_height=blockchain.get("blocks", 0),
+                peers=network.get("connections", 0),
+                uptime=uptime_str,
+                version=str(network.get("version", "unknown")),
+                last_sync=datetime.utcnow()
+            )
+        except Exception as exc:
+            logger.error("Failed to get BTC node status: %s", exc)
+            return NodeStatus(
+                id="btc-node",
+                coin="BTC",
+                status="error",
+                block_height=0,
+                peers=0,
+                uptime="0d 0h 0m",
+                version="unknown",
+                last_sync=datetime.utcnow()
+            )
 
 
 # ---------------------------------------------------------------------------

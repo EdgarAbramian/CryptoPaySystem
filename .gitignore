@@ -25,6 +25,7 @@ ENV/
 .env.bak
 
 .env
+.env.local
 !.env.example
 
 .pytest_cache/
