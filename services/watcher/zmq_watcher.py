@@ -42,7 +42,7 @@ import logging
 import struct
 from decimal import Decimal
 
-import aioredis
+import redis.asyncio as aioredis
 import zmq
 import zmq.asyncio
 

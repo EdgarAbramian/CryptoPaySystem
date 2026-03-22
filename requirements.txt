@@ -6,6 +6,7 @@ uvicorn[standard]>=0.29.0
 sqlalchemy>=2.0.30
 asyncpg>=0.29.0
 alembic>=1.13.0
+aioredis
 
 # ── Validation & settings ───────────────────────────────────────────────────
 pydantic>=2.7.0
