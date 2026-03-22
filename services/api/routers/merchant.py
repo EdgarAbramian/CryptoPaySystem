@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, AnyHttpUrl
 from sqlalchemy import func, select, case
+from sqlalchemy.orm import joinedload
 
 from core.database import DbSession
 from core.models import Balance, Coin, Merchant, Invoice, Transaction, InvoiceStatus
@@ -255,6 +256,7 @@ async def list_merchant_transactions(
         select(Transaction, Coin.symbol)
         .join(Invoice, Transaction.invoice_id == Invoice.id)
         .join(Coin, Invoice.coin_id == Coin.id)
+        .options(joinedload(Transaction.invoice))
         .where(Invoice.merchant_id == merchant.id)
         .order_by(Transaction.detected_at.desc())
     )

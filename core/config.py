@@ -41,6 +41,7 @@ class Settings(BaseSettings):
     redis_url: str = Field(default="redis://localhost:6379/0", alias="REDIS_URL")
     redis_queue_tx_processing: str = Field(default="tx_processing", alias="REDIS_QUEUE_TX_PROCESSING")
     redis_queue_tx_retry: str = Field(default="tx_retry", alias="REDIS_QUEUE_TX_RETRY")
+    redis_channel_invoice_created: str = Field(default="invoice_created", alias="REDIS_CHANNEL_INVOICE_CREATED")
 
     # ── Bitcoin ──────────────────────────────────────────────────────────────
     btc_xpub: str = Field(default="", alias="BTC_XPUB")

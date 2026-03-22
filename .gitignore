@@ -62,3 +62,4 @@ docker-compose.local.yml
 *.bak
 *.swp
 tmp/
+admin_api_docs.md

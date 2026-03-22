@@ -10,6 +10,7 @@ alembic>=1.13.0
 # ── Validation & settings ───────────────────────────────────────────────────
 pydantic>=2.7.0
 pydantic-settings>=2.2.0
+pydantic[email]
 
 # ── Bitcoin / HD wallets ────────────────────────────────────────────────────
 bip32utils>=0.3.post4

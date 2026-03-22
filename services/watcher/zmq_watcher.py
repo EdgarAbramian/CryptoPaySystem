@@ -37,9 +37,12 @@ if sys.platform == "win32":
 
 import asyncio
 import hashlib
+import json
 import logging
 import struct
+from decimal import Decimal
 
+import aioredis
 import zmq
 import zmq.asyncio
 
@@ -106,10 +109,10 @@ class ZmqWatcher:
         await self._import_existing_addresses()
 
         self._running = True
-        try:
             async with asyncio.TaskGroup() as tg:
                 tg.create_task(self._listen_tx(), name="zmq-rawtx")
                 tg.create_task(self._listen_block(), name="zmq-rawblock")
+                tg.create_task(self._listen_invoice_events(), name="redis-invoice-events")
         except* asyncio.CancelledError:
             pass
         finally:
@@ -297,6 +300,41 @@ class ZmqWatcher:
 # ─────────────────────────────────────────────────────────────────────────────
 # Entry-point
 # ─────────────────────────────────────────────────────────────────────────────
+
+
+    async def _listen_invoice_events(self) -> None:
+        """Subscribes to Redis for new invoices and updates the local cache immediately."""
+        logger.info("Subscribing to Redis channel: %s", settings.redis_channel_invoice_created)
+
+        try:
+            r = await aioredis.from_url(settings.redis_url, decode_responses=True)
+            pubsub = r.pubsub()
+            await pubsub.subscribe(settings.redis_channel_invoice_created)
+
+            async for message in pubsub.listen():
+                if not self._running:
+                    break
+                if message["type"] != "message":
+                    continue
+
+                try:
+                    data = json.loads(message["data"])
+                    invoice = CachedInvoice(
+                        invoice_id=data["invoice_id"],
+                        address=data["address"],
+                        amount_expected=Decimal(str(data["amount_expected"])),
+                        coin_symbol=data["coin_symbol"],
+                        merchant_id=data["merchant_id"],
+                    )
+                    await self._cache.add(invoice)
+                    logger.info("AddressCache: Real-time update for %s", invoice.address)
+                except Exception as e:
+                    logger.error("Failed to process invoice event: %s", e)
+
+        except Exception as exc:
+            logger.error("Redis Pub/Sub error: %s", exc)
+        finally:
+            logger.info("Unsubscribing from Redis invoice events.")
 
 
 async def main() -> None:

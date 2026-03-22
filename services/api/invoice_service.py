@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.models import Coin, Invoice, InvoiceStatus, Merchant
 from providers.registry import registry
+from services.api.events import publish_invoice_created
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +83,15 @@ class InvoiceService:
         # This is best-effort: if the node is unreachable the invoice is still
         # created and the Watcher's bootstrap will retry on next restart.
         await self._register_address_with_node(coin.symbol, address, str(invoice.id))
+
+        # Notify the Watcher to add the address to its cache immediately
+        await publish_invoice_created(
+            invoice_id=str(invoice.id),
+            address=address,
+            amount_expected=float(amount),
+            coin_symbol=coin.symbol,
+            merchant_id=str(merchant.id),
+        )
 
         return invoice
 

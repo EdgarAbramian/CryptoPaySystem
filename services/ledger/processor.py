@@ -190,10 +190,16 @@ class TxProcessor:
         tx = result.scalar_one_or_none()
 
         if tx is None:
+            # Calculate USD value based on the proportion of the payment
+            amount_usd = Decimal("0")
+            if invoice.amount_expected > 0:
+                amount_usd = (job.amount_coin / invoice.amount_expected) * (invoice.amount_usd or Decimal("0"))
+            
             tx = Transaction(
                 invoice_id=invoice.id,
                 txid=job.txid,
                 amount_received=job.amount_coin,
+                amount_usd=amount_usd.quantize(Decimal("0.01")),
                 confirmations=job.confirmations,
                 credited=False,
                 retry_count=job.retry_count,
