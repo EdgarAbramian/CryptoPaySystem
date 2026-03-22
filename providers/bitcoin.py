@@ -1,3 +1,17 @@
+import hashlib
+# --- RIPEMD160 compatibility patch for OpenSSL 3.0+ / Ubuntu 22.04+ ---
+# This MUST be placed before importing bip32utils or other libs using hashlib.
+try:
+    hashlib.new("ripemd160")
+except ValueError:
+    _orig_new = hashlib.new
+    def _patched_new(name, data=b"", **kwargs):
+        if name == "ripemd160":
+            return _orig_new(name, data, usedforsecurity=False, **kwargs)
+        return _orig_new(name, data, **kwargs)
+    hashlib.new = _patched_new
+# ----------------------------------------------------------------------
+
 import asyncio
 import logging
 from datetime import datetime
