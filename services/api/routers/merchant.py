@@ -471,7 +471,7 @@ async def get_report_summary(
     expired_invoices = [inv for inv in invoices if inv.status == InvoiceStatus.EXPIRED]
     failed_invoices = [inv for inv in invoices if inv.status == InvoiceStatus.FAILED]
     
-    total_volume_usd = sum((inv.amount_usd or Decimal("0")) for inv in paid_invoices)
+    total_volume_usd = sum(((inv.amount_usd or Decimal("0")) for inv in paid_invoices), Decimal("0"))
     successful_count = len(paid_invoices)
     
     avg_order_value = (total_volume_usd / successful_count).quantize(Decimal("0.01")) if successful_count > 0 else Decimal("0")
@@ -510,7 +510,7 @@ async def get_coin_distribution(
     result = await db.execute(stmt)
     rows = result.all()
     
-    total_volume = sum((row[1] or Decimal("0")) for row in rows)
+    total_volume = sum(((row[1] or Decimal("0")) for row in rows), Decimal("0"))
     
     return [
         CoinDistributionOut(
@@ -613,7 +613,7 @@ async def get_revenue_analytics(
         for row in rows
     ]
     
-    total_revenue_usd = sum((row[1] or Decimal("0")) for row in rows)
+    total_revenue_usd = sum(((row[1] or Decimal("0")) for row in rows), Decimal("0"))
     
     # 2. Previous period volume for growth calculation
     stmt_prev = (
