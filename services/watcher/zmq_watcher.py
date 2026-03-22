@@ -259,7 +259,7 @@ class ZmqWatcher:
 
         provider: BitcoinProvider = registry.get("BTC")  # type: ignore[assignment]
 
-        reachable = await provider.node_reachable()
+        reachable = await provider.ping()
         if not reachable:
             logger.warning(
                 "Bitcoin node not reachable at %s — skipping importaddress bootstrap",
