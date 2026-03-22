@@ -1,5 +1,66 @@
 import hashlib
-# --- RIPEMD160 compatibility patch for OpenSSL 3.0+ / Ubuntu 22.04+ ---
+import struct
+import sys
+
+# --- RIPEMD160 pure-python fallback for OpenSSL 3.0+ / Ubuntu 22.04+ ---
+def _ripemd160_pure_python(b: bytes) -> bytes:
+    """Pure python implementation of ripemd160 as a fallback."""
+    K0, K1, K2, K3, K4 = 0x00000000, 0x5A827999, 0x6ED9EBA1, 0x8F1BBCDC, 0xA953FD4E
+    KK0, KK1, KK2, KK3, KK4 = 0x50A28BE6, 0x5C4DD124, 0x6D703EF3, 0x7A6D76E9, 0x00000000
+    def ROL(n, x): return ((x << n) & 0xffffffff) | (x >> (32 - n))
+    def F0(x, y, z): return x ^ y ^ z
+    def F1(x, y, z): return (x & y) | (((~x) % 0x100000000) & z)
+    def F2(x, y, z): return (x | ((~y) % 0x100000000)) ^ z
+    def F3(x, y, z): return (x & z) | (((~z) % 0x100000000) & y)
+    def F4(x, y, z): return x ^ (y | ((~z) % 0x100000000))
+    def R(a, b, c, d, e, Fj, Kj, sj, rj, X):
+        a = ROL(sj, (a + Fj(b, c, d) + X[rj] + Kj) % 0x100000000) + e
+        return a % 0x100000000, ROL(10, c)
+    def transform(state, block):
+        x = struct.unpack('<16L', bytes(block[0:64]))
+        a, b, c, d, e = state
+        # Left side
+        for i, (F, K, s, r) in enumerate([
+            (F0,K0,11,0),(F0,K0,14,1),(F0,K0,15,2),(F0,K0,12,3),(F0,K0,5,4),(F0,K0,8,5),(F0,K0,7,6),(F0,K0,9,7),(F0,K0,11,8),(F0,K0,13,9),(F0,K0,14,10),(F0,K0,15,11),(F0,K0,6,12),(F0,K0,7,13),(F0,K0,9,14),(F0,K0,8,15),
+            (F1,K1,7,7),(F1,K1,6,4),(F1,K1,8,13),(F1,K1,13,1),(F1,K1,11,10),(F1,K1,9,6),(F1,K1,7,15),(F1,K1,15,3),(F1,K1,7,12),(F1,K1,12,0),(F1,K1,15,9),(F1,K1,9,5),(F1,K1,11,2),(F1,K1,7,14),(F1,K1,13,11),(F1,K1,12,8),
+            (F2,K2,11,3),(F2,K2,13,10),(F2,K2,6,14),(F2,K2,7,4),(F2,K2,14,9),(F2,K2,9,15),(F2,K2,13,8),(F2,K2,15,1),(F2,K2,14,2),(F2,K2,8,7),(F2,K2,13,0),(F2,K2,6,6),(F2,K2,5,13),(F2,K2,12,11),(F2,K2,7,5),(F2,K2,5,12),
+            (F3,K3,11,1),(F3,K3,12,9),(F3,K3,14,11),(F3,K3,15,10),(F3,K3,14,0),(F3,K3,15,8),(F3,K3,9,12),(F3,K3,8,4),(F3,K3,9,13),(F3,K3,14,3),(F3,K3,5,7),(F3,K3,6,15),(F3,K3,8,14),(F3,K3,6,5),(F3,K3,5,6),(F3,K3,12,2),
+            (F4,K4,9,4),(F4,K4,15,0),(F4,K4,5,5),(F4,K4,11,9),(F4,K4,6,7),(F4,K4,8,12),(F4,K4,13,2),(F4,K4,12,10),(F4,K4,5,14),(F4,K4,12,1,),(F4,K4,13,3),(F4,K4,14,8),(F4,K4,11,11),(F4,K4,8,6),(F4,K4,5,15),(F4,K4,6,13)
+        ]):
+            a, c = R(a, b, c, d, e, F, K, s, r, x)
+            a, b, c, d, e = e, a, b, c, d
+        aa, bb, cc, dd, ee = a, b, c, d, e
+        a, b, c, d, e = state
+        # Right side
+        for i, (F, K, s, r) in enumerate([
+            (F4,KK0,8,5),(F4,KK0,9,14),(F4,KK0,9,7),(F4,KK0,11,0),(F4,KK0,13,9),(F4,KK0,15,2),(F4,KK0,15,11),(F4,KK0,5,4),(F4,KK0,7,13),(F4,KK0,7,6),(F4,KK0,8,15),(F4,KK0,11,8),(F4,KK0,14,1),(F4,KK0,14,10),(F4,KK0,12,3),(F4,KK0,6,12),
+            (F3,KK1,9,6),(F3,KK1,13,11),(F3,KK1,15,3),(F3,KK1,7,7),(F3,KK1,12,0),(F3,KK1,8,13),(F3,KK1,9,5),(F3,KK1,11,10),(F3,KK1,7,14),(F3,KK1,7,15),(F3,KK1,12,8),(F3,KK1,7,12),(F3,KK1,6,4),(F3,KK1,15,9),(F3,KK1,13,1),(F3,KK1,11,2),
+            (F2,KK2,9,15),(F2,KK2,7,5),(F2,KK2,15,1),(F2,KK2,11,3),(F2,KK2,8,7),(F2,KK2,6,14),(F2,KK2,6,6),(F2,KK2,14,9),(F2,KK2,12,11),(F2,KK2,13,8),(F2,KK2,5,12),(F2,KK2,14,2),(F2,KK2,13,10),(F2,KK2,13,0),(F2,KK2,7,4),(F2,KK2,5,13),
+            (F1,KK3,15,8),(F1,KK3,5,6),(F1,KK3,8,4),(F1,KK3,11,1),(F1,KK3,14,3),(F1,KK3,14,11),(F1,KK3,6,15),(F1,KK3,14,0),(F1,KK3,6,5),(F1,KK3,9,12),(F1,KK3,12,2),(F1,KK3,9,13),(F1,KK3,12,9),(F1,KK3,5,7),(F1,KK3,15,10),(F1,KK3,8,14),
+            (F0,KK4,8,12),(F0,KK4,5,15),(F0,KK4,12,10),(F0,KK4,9,4),(F0,KK4,12,1),(F0,KK4,5,5),(F0,KK4,14,8),(F0,KK4,6,7),(F0,KK4,8,6),(F0,KK4,13,2),(F0,KK4,6,13),(F0,KK4,5,14),(F0,KK4,15,0),(F0,KK4,13,3),(F0,KK4,11,9),(F0,KK4,11,11)
+        ]):
+            a, c = R(a, b, c, d, e, F, K, s, r, x)
+            a, b, c, d, e = e, a, b, c, d
+        t = (state[1] + cc + d) % 0x100000000
+        state[1] = (state[2] + dd + e) % 0x100000000
+        state[2] = (state[3] + ee + a) % 0x100000000
+        state[3] = (state[4] + aa + b) % 0x100000000
+        state[4] = (state[0] + bb + c) % 0x100000000
+        state[0] = t
+    state = [0x67452301, 0xEFCDAB89, 0x98BADCFE, 0x10325476, 0xC3D2E1F0]
+    count = len(b)
+    padding = b'\x80' + (b'\x00' * ((64 - (count + 8 + 1) % 64) % 64)) + struct.pack('<Q', count * 8)
+    data = b + padding
+    for i in range(0, len(data), 64):
+        transform(state, data[i:i+64])
+    return struct.pack('<5L', *state)
+
+class _Ripemd160Wrapper:
+    def __init__(self, data=b""): self._data = data
+    def update(self, data): self._data += data
+    def digest(self): return _ripemd160_pure_python(self._data)
+    def copy(self): return _Ripemd160Wrapper(self._data)
+
 # This MUST be placed before importing bip32utils or other libs using hashlib.
 try:
     hashlib.new("ripemd160")
@@ -7,7 +68,9 @@ except ValueError:
     _orig_new = hashlib.new
     def _patched_new(name, data=b"", **kwargs):
         if name == "ripemd160":
-            return _orig_new(name, data, usedforsecurity=False, **kwargs)
+            res = _Ripemd160Wrapper()
+            if data: res.update(data)
+            return res
         return _orig_new(name, data, **kwargs)
     hashlib.new = _patched_new
 # ----------------------------------------------------------------------
