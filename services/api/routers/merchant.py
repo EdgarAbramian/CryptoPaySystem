@@ -13,7 +13,8 @@ from sqlalchemy import func, select, case
 from sqlalchemy.orm import joinedload
 
 from core.database import DbSession
-from core.models import Balance, Coin, Merchant, Invoice, Transaction, InvoiceStatus
+from core.models import Balance, Coin, Merchant, Invoice, Transaction, InvoiceStatus, SystemFeeLog
+from core.config import settings
 from services.api.admin_auth import require_merchant
 from services.price.service import PriceService
 
@@ -83,6 +84,8 @@ class MerchantTransactionOut(BaseModel):
     amount_received: Decimal
     amount_usd: Decimal
     coin_symbol: str
+    fee: Decimal
+    fee_usd: Decimal
     status: str
     confirmations: int
     created_at: str
@@ -253,9 +256,10 @@ async def list_merchant_transactions(
     search: str | None = Query(None),
 ):
     query = (
-        select(Transaction, Coin.symbol)
+        select(Transaction, Coin.symbol, SystemFeeLog)
         .join(Invoice, Transaction.invoice_id == Invoice.id)
         .join(Coin, Invoice.coin_id == Coin.id)
+        .outerjoin(SystemFeeLog, Transaction.id == SystemFeeLog.transaction_id)
         .options(joinedload(Transaction.invoice))
         .where(Invoice.merchant_id == merchant.id)
         .order_by(Transaction.detected_at.desc())
@@ -282,9 +286,17 @@ async def list_merchant_transactions(
 
     if status and status != "all":
         if status in ["completed", "PAID"]:
-            query = query.where(Transaction.confirmations >= 6)
+            query = query.where(
+                (Transaction.confirmations >= settings.ledger_required_confirmations) |
+                (Invoice.status == InvoiceStatus.PAID)
+            )
         elif status in ["pending", "PENDING", "PARTIAL", "NEW"]:
-            query = query.where(Transaction.confirmations < 6, Invoice.status != InvoiceStatus.FAILED)
+            query = query.where(
+                Transaction.confirmations < settings.ledger_required_confirmations,
+                Invoice.status != InvoiceStatus.PAID,
+                Invoice.status != InvoiceStatus.FAILED,
+                Invoice.status != InvoiceStatus.EXPIRED
+            )
         elif status in ["failed", "FAILED"]:
             query = query.where(Invoice.status == InvoiceStatus.FAILED)
 
@@ -294,13 +306,15 @@ async def list_merchant_transactions(
             id=str(tx.id),
             txid=tx.txid,
             amount_received=tx.amount_received,
-            amount_usd=tx.amount_usd or Decimal("0"),
+            amount_usd=tx.amount_usd if tx.amount_usd is not None else PriceService.to_usd(tx.amount_received, symbol),
             coin_symbol=symbol,
-            status="completed" if tx.confirmations >= 6 else ("failed" if tx.invoice.status == InvoiceStatus.FAILED else "pending"),
+            fee=sfl.fee_amount if sfl else Decimal("0"),
+            fee_usd=sfl.fee_amount_usd if (sfl and sfl.fee_amount_usd is not None) else (PriceService.to_usd(sfl.fee_amount, symbol) if sfl else Decimal("0")),
+            status="completed" if (tx.confirmations >= settings.ledger_required_confirmations or tx.invoice.status == InvoiceStatus.PAID) else ("failed" if tx.invoice.status == InvoiceStatus.FAILED else "pending"),
             confirmations=tx.confirmations,
             created_at=tx.detected_at.isoformat()
         )
-        for tx, symbol in result.all()
+        for tx, symbol, sfl in result.all()
     ]
 
 
@@ -346,9 +360,17 @@ async def export_merchant_transactions(
 
     if status and status != "all":
         if status in ["completed", "PAID"]:
-            query = query.where(Transaction.confirmations >= 6)
+            query = query.where(
+                (Transaction.confirmations >= settings.ledger_required_confirmations) |
+                (Invoice.status == InvoiceStatus.PAID)
+            )
         elif status in ["pending", "PENDING", "PARTIAL", "NEW"]:
-            query = query.where(Transaction.confirmations < 6, Invoice.status != InvoiceStatus.FAILED)
+            query = query.where(
+                Transaction.confirmations < settings.ledger_required_confirmations,
+                Invoice.status != InvoiceStatus.PAID,
+                Invoice.status != InvoiceStatus.FAILED,
+                Invoice.status != InvoiceStatus.EXPIRED
+            )
         elif status in ["failed", "FAILED"]:
             query = query.where(Invoice.status == InvoiceStatus.FAILED)
 
@@ -362,17 +384,20 @@ async def export_merchant_transactions(
             import openpyxl
             wb = openpyxl.Workbook()
             ws = wb.active
-            headers = ["ID", "TXID", "Amount", "USD", "Coin", "Status", "Address", "Customer", "Created At"]
+            headers = ["ID", "TXID", "Amount", "USD", "Coin", "Fee", "Fee USD", "Status", "Address", "Customer", "Created At"]
             ws.append(headers)
-            for tx, inv, c in rows:
-                tx_status = "completed" if tx.confirmations >= 6 else ("failed" if inv.status == InvoiceStatus.FAILED else "pending")
+            for tx, symbol, sfl, inv in rows:
+                tx_status = "completed" if (tx.confirmations >= settings.ledger_required_confirmations or inv.status == InvoiceStatus.PAID) else ("failed" if inv.status == InvoiceStatus.FAILED else "pending")
                 ws.append([
                     str(tx.id), tx.txid, float(tx.amount_received),
-                    float(tx.amount_usd or 0), c.symbol,
+                    float(tx.amount_usd if tx.amount_usd is not None else PriceService.to_usd(tx.amount_received, symbol)), 
+                    symbol,
+                    float(sfl.fee_amount if sfl else 0),
+                    float(sfl.fee_amount_usd if (sfl and sfl.fee_amount_usd is not None) else (PriceService.to_usd(sfl.fee_amount, symbol) if sfl else 0)),
                     tx_status, inv.address, inv.customer_email or "N/A",
                     tx.detected_at.strftime("%Y-%m-%d %H:%M:%S")
                 ])
-            
+                
             output = io.BytesIO()
             wb.save(output)
             output.seek(0)
@@ -387,13 +412,16 @@ async def export_merchant_transactions(
     # Default: CSV
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(["ID", "TXID", "Amount", "USD", "Coin", "Status", "Address", "Customer", "Created At"])
+    writer.writerow(["ID", "TXID", "Amount", "USD", "Coin", "Fee", "Fee USD", "Status", "Address", "Customer", "Created At"])
 
-    for tx, inv, c in rows:
-        tx_status = "completed" if tx.confirmations >= 6 else ("failed" if inv.status == InvoiceStatus.FAILED else "pending")
+    for tx, symbol, sfl, inv in rows:
+        tx_status = "completed" if (tx.confirmations >= settings.ledger_required_confirmations or inv.status == InvoiceStatus.PAID) else ("failed" if inv.status == InvoiceStatus.FAILED else "pending")
         writer.writerow([
             str(tx.id), tx.txid, str(tx.amount_received),
-            str(tx.amount_usd or 0), c.symbol,
+            str(tx.amount_usd if tx.amount_usd is not None else PriceService.to_usd(tx.amount_received, symbol)),
+            symbol,
+            str(sfl.fee_amount if sfl else 0),
+            str(sfl.fee_amount_usd if (sfl and sfl.fee_amount_usd is not None) else (PriceService.to_usd(sfl.fee_amount, symbol) if sfl else 0)),
             tx_status, inv.address, inv.customer_email or "N/A",
             tx.detected_at.isoformat()
         ])

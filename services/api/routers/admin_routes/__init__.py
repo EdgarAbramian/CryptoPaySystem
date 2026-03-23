@@ -7,3 +7,4 @@ from .admin_system import router as system_router
 from .admin_search import router as search_router
 from .admin_notifications import router as notifications_router
 from .admin_analytics import router as analytics_router
+from .admin_charts import router as charts_router

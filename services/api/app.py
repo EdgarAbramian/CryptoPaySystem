@@ -90,6 +90,7 @@ Authorization: Bearer <token>
     app.include_router(admin_routes.search_router,     prefix="/api/admin")
     app.include_router(admin_routes.notifications_router, prefix="/api/admin")
     app.include_router(admin_routes.analytics_router,    prefix="/api/admin")
+    app.include_router(admin_routes.charts_router,       prefix="/api/admin")
 
     # ── Dev / Testnet helpers (DEBUG only) ───────────────────────────────────
     # Safe to delete dev.py in production — this block is never executed when

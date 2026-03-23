@@ -10,14 +10,18 @@ from sqlalchemy import func, select
 
 from core.database import DbSession
 from core.models import Coin, Invoice, Merchant, SystemFeeLog, Transaction, WebhookLog
+from core.config import settings
 from services.api.admin_auth import require_admin
+from services.price.service import PriceService
 
 from datetime import datetime
 
 def map_tx_status(confirmations: int, invoice_status: str) -> str:
     if invoice_status == "FAILED":
         return "failed"
-    return "completed" if confirmations >= 6 else "pending"
+    if invoice_status == "PAID":
+        return "completed"
+    return "completed" if confirmations >= settings.ledger_required_confirmations else "pending"
 
 def _apply_filters(
     query,
@@ -54,9 +58,16 @@ def _apply_filters(
     if status and status != "all":
         # Supports both InvoiceStatus enum values and legacy simplified labels
         if status in ["completed", "PAID"]:
-            query = query.where(Transaction.confirmations >= 6)
+            query = query.where(
+                (Transaction.confirmations >= settings.ledger_required_confirmations) |
+                (Invoice.status == "PAID")
+            )
         elif status in ["pending", "PENDING", "PARTIAL", "NEW"]:
-            query = query.where(Transaction.confirmations < 6, Invoice.status != "FAILED")
+            query = query.where(
+                Transaction.confirmations < settings.ledger_required_confirmations,
+                Invoice.status != "PAID",
+                Invoice.status != "FAILED"
+            )
         elif status in ["failed", "FAILED"]:
             query = query.where(Invoice.status == "FAILED")
         elif status == "EXPIRED":
@@ -90,10 +101,11 @@ class TransactionOut(BaseModel):
     merchant_id: uuid.UUID
     merchant_name: str | None
     amount_received: Decimal
-    amount_usd: Decimal | None
+    amount_usd: Decimal
     coin_symbol: str
     fiat_currency: str = "USD"
     fee: Decimal
+    fee_usd: Decimal
     status: str  # completed, pending, failed
     confirmations: int
     created_at: str
@@ -154,7 +166,7 @@ async def get_recent_transactions(
             txid=tx.txid,
             merchant_name=m_name,
             amount_usd=tx.amount_usd,
-            status="CONFIRMED" if tx.confirmations >= 6 else "PENDING",
+            status="CONFIRMED" if (tx.confirmations >= settings.ledger_required_confirmations or tx.credited) else "PENDING",
             confirmed_at=tx.confirmed_at.isoformat() if tx.confirmed_at else None,
         )
         for tx, m_name in rows
@@ -209,10 +221,11 @@ async def list_transactions(
             merchant_id=m.id,
             merchant_name=m.name,
             amount_received=tx.amount_received,
-            amount_usd=tx.amount_usd,
+            amount_usd=tx.amount_usd if tx.amount_usd is not None else PriceService.to_usd(tx.amount_received, c.symbol),
             coin_symbol=c.symbol,
             fiat_currency="USD",
             fee=sfl.fee_amount if sfl else Decimal("0"),
+            fee_usd=sfl.fee_amount_usd if (sfl and sfl.fee_amount_usd is not None) else (PriceService.to_usd(sfl.fee_amount, c.symbol) if sfl else Decimal("0")),
             status=map_tx_status(tx.confirmations, inv.status.value),
             confirmations=tx.confirmations,
             created_at=tx.detected_at.isoformat(),
@@ -356,10 +369,11 @@ async def get_transaction(tx_id: uuid.UUID, db: DbSession) -> TransactionDetailO
         merchant_id=m.id,
         merchant_name=m.name,
         amount_received=tx.amount_received,
-        amount_usd=tx.amount_usd,
+        amount_usd=tx.amount_usd if tx.amount_usd is not None else PriceService.to_usd(tx.amount_received, c.symbol),
         coin_symbol=c.symbol,
         fiat_currency="USD",
         fee=sfl.fee_amount if sfl else Decimal("0"),
+        fee_usd=sfl.fee_amount_usd if (sfl and sfl.fee_amount_usd is not None) else (PriceService.to_usd(sfl.fee_amount, c.symbol) if sfl else Decimal("0")),
         status=map_tx_status(tx.confirmations, inv.status.value),
         confirmations=tx.confirmations,
         created_at=tx.detected_at.isoformat(),
