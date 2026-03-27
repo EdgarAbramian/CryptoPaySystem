@@ -8,10 +8,14 @@ from functools import lru_cache
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=BASE_DIR / ".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
@@ -82,3 +86,9 @@ def get_settings() -> Settings:
 
 
 settings: Settings = get_settings()
+
+import os
+# print loaded database host to verify it's from .env
+_db_url = settings.database_url
+_masked_db = _db_url.split("@")[-1] if "@" in _db_url else _db_url
+print(f"--- CONFIG DEBUG: env={BASE_DIR/'.env'} exists={(BASE_DIR/'.env').exists()} DB={_masked_db} ---")

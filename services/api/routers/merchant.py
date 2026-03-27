@@ -332,9 +332,10 @@ async def export_merchant_transactions(
     search: str | None = Query(None),
 ):
     query = (
-        select(Transaction, Invoice, Coin)
+        select(Transaction, Coin.symbol, SystemFeeLog, Invoice)
         .join(Invoice, Transaction.invoice_id == Invoice.id)
         .join(Coin, Invoice.coin_id == Coin.id)
+        .outerjoin(SystemFeeLog, Transaction.id == SystemFeeLog.transaction_id)
         .where(Invoice.merchant_id == merchant.id)
         .order_by(Transaction.detected_at.desc())
     )
